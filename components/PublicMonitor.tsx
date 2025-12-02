@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useQueue } from '../context/QueueContext';
-import { TicketStatus, SERVICES } from '../types';
+import { TicketStatus, SERVICES, Ticket } from '../types';
 
 const AfpmbaiLogo = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 200 200" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -70,6 +70,39 @@ const PublicMonitor: React.FC = () => {
     playTone(880, 'sine', 0.6, 0, 0.05); 
   };
 
+  const speakAnnouncement = (ticket: Ticket) => {
+    if (!('speechSynthesis' in window)) return;
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    // Prepare text
+    // Spacing out the number for clearer pronunciation (e.g. "A 1 0 1" instead of "A one hundred one")
+    const numberSpaced = ticket.number.split('').join(' ');
+    
+    // Construct announcement
+    // Format: "[Name]. Ticket Number [Code]. Please proceed to Counter [N]."
+    const nameToSpeak = ticket.customerName || 'Guest';
+    const text = `${nameToSpeak}. Ticket Number ${numberSpaced}. Please proceed to Counter ${ticket.counter}`;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.75; // Slow speaking rate as requested
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    // Try to select an English voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.lang.includes('en') && v.name.includes('Female')) || voices.find(v => v.lang.includes('en'));
+    if (preferredVoice) {
+        utterance.voice = preferredVoice;
+    }
+
+    // Delay speech to allow chime to finish (approx 2 seconds)
+    setTimeout(() => {
+        window.speechSynthesis.speak(utterance);
+    }, 2000);
+  };
+
   // Monitor tickets for changes
   useEffect(() => {
     const currentServing = tickets
@@ -88,6 +121,7 @@ const PublicMonitor: React.FC = () => {
     // Detect new serving ticket
     if (currentServing && currentServing.id !== lastServedIdRef.current) {
       playServingChime();
+      speakAnnouncement(currentServing);
       lastServedIdRef.current = currentServing.id;
     }
 
@@ -185,8 +219,6 @@ const PublicMonitor: React.FC = () => {
               muted
               playsInline
             >
-              {/* Replace the src below with the URL of your uploaded AFPMBAI video file */}
-              {/* Using a placeholder stock video for demonstration purposes */}
               <source src="https://videos.pexels.com/video-files/7710243/7710243-hd_1920_1080_30fps.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>

@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { useQueue } from '../context/QueueContext';
-import { SERVICES, ServiceType, TicketStatus } from '../types';
-import { Users, Filter, Bell, CheckSquare, SkipForward, Clock, Activity, LogOut, User, Briefcase, LayoutGrid, Check, AlertCircle } from 'lucide-react';
+import { SERVICES, ServiceType, TicketStatus, Ticket } from '../types';
+import { Users, Filter, Bell, CheckSquare, SkipForward, Clock, Activity, LogOut, User, Briefcase, LayoutGrid, Check, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AfpmbaiLogo = ({ className }: { className?: string }) => (
@@ -26,6 +27,8 @@ const StaffDashboard: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoginSuccess, setIsLoginSuccess] = useState(false);
   
   // Configuration selections
   const [assignedCounter, setAssignedCounter] = useState(0);
@@ -35,36 +38,119 @@ const StaffDashboard: React.FC = () => {
   // If 'ALL', it means 'All Assigned Services'
   const [filterType, setFilterType] = useState<ServiceType | 'ALL'>('ALL');
 
+  // --- AUDIO LOGIC ---
+  const playTone = (freq: number, type: 'sine' | 'triangle', duration: number, delay: number = 0, volume: number = 0.1) => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+      
+      // Volume envelope for smooth sound
+      gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+      gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + delay + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + duration);
+    } catch (e) {
+      console.error("Audio play failed", e);
+    }
+  };
+
+  const playServingChime = () => {
+    // "Ding-Dong" effect (Major 3rd: C5 -> E5)
+    playTone(523.25, 'sine', 1.2, 0, 0.1); // C5
+    playTone(659.25, 'sine', 1.5, 0.25, 0.1); // E5
+  };
+
+  const speakAnnouncement = (ticket: Ticket) => {
+    if (!('speechSynthesis' in window)) return;
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    // Prepare text
+    // Spacing out the number for clearer pronunciation (e.g. "A 1 0 1" instead of "A one hundred one")
+    const numberSpaced = ticket.number.split('').join(' ');
+    
+    // Construct announcement: Name First, then Ticket Number
+    const nameToSpeak = ticket.customerName || 'Guest';
+    const text = `${nameToSpeak}. Ticket Number ${numberSpaced}.`;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.8; // Slightly slower
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    // Try to select an English voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.lang.includes('en') && v.name.includes('Female')) || voices.find(v => v.lang.includes('en'));
+    if (preferredVoice) {
+        utterance.voice = preferredVoice;
+    }
+
+    // Delay speech slightly to allow chime to start
+    setTimeout(() => {
+        window.speechSynthesis.speak(utterance);
+    }, 1000);
+  };
+
   // --- Login Handlers ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // 1. Check Credentials
+    // 1. Basic Empty Checks
     if (!username.trim() || !password.trim()) {
       setError("Please enter both username and password.");
       return;
     }
 
-    if (username !== 'admin' || password !== 'admin') {
-      setError("Invalid credentials. Please check your username and password.");
-      return;
-    }
+    setIsLoading(true);
 
-    // 2. Check Counter Selection
-    if (assignedCounter === 0) {
-      setError("Please select your assigned Counter number.");
-      return;
-    }
+    // Simulate Network Request / Processing Time
+    setTimeout(() => {
+      // 2. Check Credentials
+      if (username !== 'admin' || password !== 'admin') {
+        setError("Invalid credentials. Please check your username and password.");
+        setIsLoading(false);
+        return;
+      }
 
-    // 3. Check Service Selection
-    if (assignedServices.length === 0) {
-      setError("Please select at least one transaction type you will handle.");
-      return;
-    }
+      // 3. Check Counter Selection
+      if (assignedCounter === 0) {
+        setError("Please select your assigned Counter number.");
+        setIsLoading(false);
+        return;
+      }
 
-    // All checks passed
-    setIsAuthenticated(true);
+      // 4. Check Service Selection
+      if (assignedServices.length === 0) {
+        setError("Please select at least one transaction type you will handle.");
+        setIsLoading(false);
+        return;
+      }
+
+      // All checks passed - Success Sequence
+      setIsLoginSuccess(true);
+      
+      // Delay transition to dashboard to show success state
+      setTimeout(() => {
+        setIsAuthenticated(true);
+        setIsLoading(false);
+        setIsLoginSuccess(false); // Reset for next time logout happens
+      }, 1500);
+
+    }, 1500); // 1.5s simulated delay
   };
 
   const toggleServiceSelection = (type: ServiceType) => {
@@ -110,7 +196,11 @@ const StaffDashboard: React.FC = () => {
     const serviceFilter = filterType === 'ALL' ? assignedServices : filterType;
     
     const ticket = callNextTicket(assignedCounter, serviceFilter);
-    if (!ticket) {
+    if (ticket) {
+      // Trigger Audio Alert
+      playServingChime();
+      speakAnnouncement(ticket);
+    } else {
       alert("No tickets available in the queue for your assigned transactions.");
     }
   };
@@ -130,62 +220,89 @@ const StaffDashboard: React.FC = () => {
       <div className="h-screen w-full bg-white flex flex-col lg:flex-row font-sans overflow-hidden">
           
           {/* Left Column: Login */}
-          <div className="w-full lg:w-1/3 bg-afpmbai-900 text-white p-8 lg:p-12 flex flex-col justify-center relative shadow-xl z-10 shrink-0">
-            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-            <div className="relative z-10 max-w-md mx-auto w-full">
-              <div className="mb-10 text-afpmbai-300 flex flex-col items-center text-center">
-                {/* Logo Placeholder */}
-                <div className="w-32 h-32 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-2xl border-4 border-afpmbai-500 transform hover:scale-105 transition-transform duration-300 p-2">
-                   <AfpmbaiLogo className="w-full h-full" />
-                </div>
-                <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Staff Access</h1>
-                <p className="opacity-80 text-lg">Secure Login Portal</p>
-              </div>
-
-              {error && (
-                <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-lg p-4 flex items-start gap-3 animate-fade-in">
-                  <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
-                  <p className="text-sm text-red-100 font-medium leading-relaxed">{error}</p>
-                </div>
-              )}
-              
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-afpmbai-300 mb-2">Username</label>
-                  <input 
-                    type="text" 
-                    value={username}
-                    onChange={(e) => { setUsername(e.target.value); setError(null); }}
-                    className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-4 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all"
-                    placeholder="Enter username"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-afpmbai-300 mb-2">Password</label>
-                  <input 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-4 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all"
-                    placeholder="Enter password"
-                  />
-                </div>
+          <div className="w-full lg:w-1/3 bg-afpmbai-900 text-white relative shadow-xl z-10 shrink-0 h-full flex flex-col">
+            <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+            
+            {/* Scrollable content container */}
+            <div className="flex-1 overflow-y-auto p-8 lg:p-12 flex flex-col justify-center">
+              <div className="relative z-10 max-w-md mx-auto w-full">
                 
-                <div className="pt-4">
-                  <p className="text-xs text-center text-afpmbai-400 mb-4">
-                    Default: <span className="font-mono bg-afpmbai-800 px-1 rounded">admin</span> / <span className="font-mono bg-afpmbai-800 px-1 rounded">admin</span>
-                  </p>
-                  <button 
-                    type="submit"
-                    className="w-full bg-white text-afpmbai-900 font-bold py-4 rounded-xl hover:bg-afpmbai-100 transition-colors shadow-lg text-lg flex justify-center items-center gap-2"
-                  >
-                    Login to Dashboard
-                  </button>
-                  <Link to="/" className="block text-center text-afpmbai-400 mt-6 hover:text-white text-sm">
-                    Cancel and Return Home
-                  </Link>
-                </div>
-              </form>
+                {isLoginSuccess ? (
+                  <div className="flex flex-col items-center justify-center text-center animate-fade-in py-10">
+                    <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-500/50">
+                      <CheckCircle className="text-white w-12 h-12" />
+                    </div>
+                    <h2 className="text-3xl font-bold text-white mb-2">Access Granted</h2>
+                    <p className="text-green-200">Welcome back, Administrator.</p>
+                    <p className="text-sm text-afpmbai-400 mt-8">Redirecting to dashboard...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-10 text-afpmbai-300 flex flex-col items-center text-center">
+                      {/* Logo Placeholder */}
+                      <div className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-2xl border-4 border-afpmbai-500 transform hover:scale-105 transition-transform duration-300 p-2">
+                        <AfpmbaiLogo className="w-full h-full" />
+                      </div>
+                      <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 tracking-tight">Staff Access</h1>
+                      <p className="opacity-80 text-base md:text-lg">Secure Login Portal</p>
+                    </div>
+
+                    {error && (
+                      <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-lg p-4 flex items-start gap-3 animate-fade-in">
+                        <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
+                        <p className="text-sm text-red-100 font-medium leading-relaxed">{error}</p>
+                      </div>
+                    )}
+                    
+                    <form onSubmit={handleLogin} className="space-y-5">
+                      <div>
+                        <label className="block text-sm font-medium text-afpmbai-300 mb-2">Username</label>
+                        <input 
+                          type="text" 
+                          value={username}
+                          onChange={(e) => { setUsername(e.target.value); setError(null); }}
+                          disabled={isLoading}
+                          className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-4 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          placeholder="Enter username"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-afpmbai-300 mb-2">Password</label>
+                        <input 
+                          type="password" 
+                          value={password}
+                          onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                          disabled={isLoading}
+                          className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-4 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          placeholder="Enter password"
+                        />
+                      </div>
+                      
+                      <div className="pt-4">
+                        <button 
+                          type="submit"
+                          disabled={isLoading}
+                          className="w-full bg-white text-afpmbai-900 font-bold py-4 rounded-xl hover:bg-afpmbai-100 transition-all shadow-lg text-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed active:scale-95"
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="animate-spin" /> Verifying...
+                            </>
+                          ) : (
+                            "Login to Dashboard"
+                          )}
+                        </button>
+                        <p className="text-xs text-center text-afpmbai-400 mt-4">
+                          Default: <span className="font-mono bg-afpmbai-800 px-1 rounded">admin</span> / <span className="font-mono bg-afpmbai-800 px-1 rounded">admin</span>
+                        </p>
+                        <Link to="/" className={`block text-center text-afpmbai-400 mt-6 hover:text-white text-sm ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+                          Cancel and Return Home
+                        </Link>
+                      </div>
+                    </form>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -210,8 +327,9 @@ const StaffDashboard: React.FC = () => {
                        <div className="relative max-w-xs">
                          <select 
                             value={assignedCounter}
+                            disabled={isLoading || isLoginSuccess}
                             onChange={(e) => { setAssignedCounter(Number(e.target.value)); setError(null); }}
-                            className={`w-full p-3 bg-white border-2 rounded-xl font-bold text-gray-800 text-lg focus:ring-4 focus:ring-afpmbai-100 outline-none appearance-none cursor-pointer ${assignedCounter === 0 && error ? 'border-red-500' : 'border-gray-200 focus:border-afpmbai-500'}`}
+                            className={`w-full p-3 bg-white border-2 rounded-xl font-bold text-gray-800 text-lg focus:ring-4 focus:ring-afpmbai-100 outline-none appearance-none cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed ${assignedCounter === 0 && error ? 'border-red-500' : 'border-gray-200 focus:border-afpmbai-500'}`}
                          >
                             <option value={0}>Select Counter...</option>
                             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
@@ -233,7 +351,8 @@ const StaffDashboard: React.FC = () => {
                           <button 
                             type="button"
                             onClick={toggleSelectAll}
-                            className="text-sm font-bold text-afpmbai-600 hover:text-afpmbai-800 hover:underline px-3 py-1 bg-afpmbai-100 rounded-lg"
+                            disabled={isLoading || isLoginSuccess}
+                            className="text-sm font-bold text-afpmbai-600 hover:text-afpmbai-800 hover:underline px-3 py-1 bg-afpmbai-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {assignedServices.length === SERVICES.length ? 'Deselect All' : 'Select All'}
                           </button>
@@ -246,12 +365,15 @@ const StaffDashboard: React.FC = () => {
                                 return (
                                   <div 
                                     key={service.type}
-                                    onClick={() => toggleServiceSelection(service.type)}
+                                    onClick={() => {
+                                      if(!isLoading && !isLoginSuccess) toggleServiceSelection(service.type);
+                                    }}
                                     className={`
                                       cursor-pointer border-2 rounded-xl p-3 flex items-center gap-3 transition-all h-full
                                       ${isSelected 
                                         ? 'bg-afpmbai-50 border-afpmbai-500 shadow-md' 
                                         : 'bg-white border-gray-100 hover:border-gray-300'}
+                                      ${(isLoading || isLoginSuccess) ? 'opacity-60 cursor-not-allowed' : ''}
                                     `}
                                   >
                                     <div className={`

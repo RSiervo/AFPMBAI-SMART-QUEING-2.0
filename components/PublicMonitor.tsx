@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useQueue } from '../context/QueueContext';
 import { TicketStatus, SERVICES, Ticket } from '../types';
@@ -254,7 +253,7 @@ const PublicMonitor: React.FC = () => {
               muted
               playsInline
             >
-              <source src="https://videos.pexels.com/video-files/7710243/7710243-hd_1920_1080_30fps.mp4" type="video/mp4" />
+              <source src="/static/AFPMBAI.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
             

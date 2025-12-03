@@ -6,6 +6,7 @@ interface QueueContextType {
   tickets: Ticket[];
   createTicket: (serviceType: ServiceType, customerName: string) => Ticket;
   callNextTicket: (counterId: number, serviceFilter?: ServiceType | ServiceType[] | 'ALL') => Ticket | null;
+  recallTicket: (ticketId: string) => void;
   completeTicket: (ticketId: string) => void;
   skipTicket: (ticketId: string) => void;
   resetQueue: () => void;
@@ -103,6 +104,14 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return null;
   };
 
+  const recallTicket = (ticketId: string) => {
+    setTickets(prev => prev.map(t => 
+      t.id === ticketId 
+        ? { ...t, recalledAt: Date.now() } 
+        : t
+    ));
+  };
+
   const completeTicket = (ticketId: string) => {
     setTickets(prev => prev.map(t => 
       t.id === ticketId 
@@ -136,6 +145,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       tickets, 
       createTicket, 
       callNextTicket, 
+      recallTicket,
       completeTicket, 
       skipTicket, 
       resetQueue,

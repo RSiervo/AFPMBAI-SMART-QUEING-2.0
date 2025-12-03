@@ -29,6 +29,7 @@ export interface Ticket {
   createdAt: number;
   servedAt?: number;
   completedAt?: number;
+  recalledAt?: number; // Added field to track recalls
   counter?: number; // The counter number serving this ticket
   customerName?: string; // Added customer name field
 }

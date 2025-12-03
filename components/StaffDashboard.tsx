@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useQueue } from '../context/QueueContext';
 import { SERVICES, ServiceType, TicketStatus, Ticket } from '../types';
-import { Users, Filter, Bell, CheckSquare, SkipForward, Clock, Activity, LogOut, User, Briefcase, LayoutGrid, Check, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
+import { Users, Filter, Bell, CheckSquare, SkipForward, Clock, Activity, LogOut, User, Briefcase, LayoutGrid, Check, AlertCircle, Loader2, CheckCircle, Volume2, ArrowRight, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AfpmbaiLogo = ({ className }: { className?: string }) => (
@@ -20,7 +20,7 @@ const AfpmbaiLogo = ({ className }: { className?: string }) => (
 );
 
 const StaffDashboard: React.FC = () => {
-  const { tickets, callNextTicket, completeTicket, skipTicket, resetQueue } = useQueue();
+  const { tickets, callNextTicket, recallTicket, completeTicket, skipTicket, resetQueue } = useQueue();
 
   // --- Auth & Config State ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -82,18 +82,25 @@ const StaffDashboard: React.FC = () => {
     // Spacing out the number for clearer pronunciation (e.g. "A 1 0 1" instead of "A one hundred one")
     const numberSpaced = ticket.number.split('').join(' ');
     
-    // Construct announcement: Name First, then Ticket Number
+    // Construct announcement with specific phrasing
     const nameToSpeak = ticket.customerName || 'Guest';
-    const text = `${nameToSpeak}. Ticket Number ${numberSpaced}.`;
+    // Using "Sir or Ma'am" for better TTS flow than "Sir slash Ma'am"
+    const text = `Calling for Sir or Ma'am ${nameToSpeak} with the ticket number ${numberSpaced} please proceed to counter ${ticket.counter || assignedCounter}.`;
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.8; // Slightly slower
+    utterance.rate = 0.65; // Slower (0.65) for better clarity as requested
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
 
-    // Try to select an English voice
+    // Select a consistent clear English voice
     const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(v => v.lang.includes('en') && v.name.includes('Female')) || voices.find(v => v.lang.includes('en'));
+    // Order of preference for clear English voices to ensure "1 voice only" consistency
+    const preferredVoice = 
+        voices.find(v => v.name === 'Google US English') || 
+        voices.find(v => v.name === 'Microsoft Zira Desktop') || 
+        voices.find(v => v.lang.includes('en-US') && v.name.includes('Female')) || 
+        voices.find(v => v.lang.includes('en'));
+
     if (preferredVoice) {
         utterance.voice = preferredVoice;
     }
@@ -205,6 +212,17 @@ const StaffDashboard: React.FC = () => {
     }
   };
 
+  const handleRecall = () => {
+    if (!currentTicket) return;
+    
+    // 1. Update system state so Monitor knows to speak again
+    recallTicket(currentTicket.id);
+    
+    // 2. Play local audio for staff confirmation
+    playServingChime();
+    speakAnnouncement(currentTicket);
+  };
+
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUsername('');
@@ -220,82 +238,82 @@ const StaffDashboard: React.FC = () => {
       <div className="h-screen w-full bg-white flex flex-col lg:flex-row font-sans overflow-hidden">
           
           {/* Left Column: Login */}
-          <div className="w-full lg:w-1/3 bg-afpmbai-900 text-white relative shadow-xl z-10 shrink-0 h-full flex flex-col">
+          <div className="w-full lg:w-4/12 bg-afpmbai-900 text-white relative shadow-xl z-10 shrink-0 h-full flex flex-col">
             <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
             
-            {/* Scrollable content container */}
-            <div className="flex-1 overflow-y-auto p-8 lg:p-12 flex flex-col justify-center">
-              <div className="relative z-10 max-w-md mx-auto w-full">
+            {/* Scrollable content container with NO SCROLLBAR */}
+            <div className="flex-1 overflow-y-auto no-scrollbar p-6 lg:p-10 flex flex-col justify-center">
+              <div className="relative z-10 max-w-sm mx-auto w-full">
                 
                 {isLoginSuccess ? (
                   <div className="flex flex-col items-center justify-center text-center animate-fade-in py-10">
-                    <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-500/50">
-                      <CheckCircle className="text-white w-12 h-12" />
+                    <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-500/50">
+                      <CheckCircle className="text-white w-10 h-10" />
                     </div>
-                    <h2 className="text-3xl font-bold text-white mb-2">Access Granted</h2>
+                    <h2 className="text-2xl font-bold text-white mb-2">Access Granted</h2>
                     <p className="text-green-200">Welcome back, Administrator.</p>
                     <p className="text-sm text-afpmbai-400 mt-8">Redirecting to dashboard...</p>
                   </div>
                 ) : (
                   <>
-                    <div className="mb-10 text-afpmbai-300 flex flex-col items-center text-center">
+                    <div className="mb-8 text-afpmbai-300 flex flex-col items-center text-center">
                       {/* Logo Placeholder */}
-                      <div className="w-24 h-24 md:w-32 md:h-32 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-2xl border-4 border-afpmbai-500 transform hover:scale-105 transition-transform duration-300 p-2">
+                      <div className="w-20 h-20 md:w-24 md:h-24 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-2xl border-4 border-afpmbai-500 transform hover:scale-105 transition-transform duration-300 p-2">
                         <AfpmbaiLogo className="w-full h-full" />
                       </div>
-                      <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 tracking-tight">Staff Access</h1>
-                      <p className="opacity-80 text-base md:text-lg">Secure Login Portal</p>
+                      <h1 className="text-2xl md:text-3xl font-bold text-white mb-1 tracking-tight">Staff Access</h1>
+                      <p className="opacity-80 text-sm md:text-base">Secure Login Portal</p>
                     </div>
 
                     {error && (
-                      <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-lg p-4 flex items-start gap-3 animate-fade-in">
-                        <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
-                        <p className="text-sm text-red-100 font-medium leading-relaxed">{error}</p>
+                      <div className="mb-5 bg-red-500/10 border border-red-500/50 rounded-lg p-3 flex items-start gap-3 animate-fade-in">
+                        <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={18} />
+                        <p className="text-xs text-red-100 font-medium leading-relaxed">{error}</p>
                       </div>
                     )}
                     
-                    <form onSubmit={handleLogin} className="space-y-5">
+                    <form onSubmit={handleLogin} className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-afpmbai-300 mb-2">Username</label>
+                        <label className="block text-xs font-medium text-afpmbai-300 mb-1.5">Username</label>
                         <input 
                           type="text" 
                           value={username}
                           onChange={(e) => { setUsername(e.target.value); setError(null); }}
                           disabled={isLoading}
-                          className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-4 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-3 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           placeholder="Enter username"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-afpmbai-300 mb-2">Password</label>
+                        <label className="block text-xs font-medium text-afpmbai-300 mb-1.5">Password</label>
                         <input 
                           type="password" 
                           value={password}
                           onChange={(e) => { setPassword(e.target.value); setError(null); }}
                           disabled={isLoading}
-                          className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-4 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full bg-afpmbai-800 border border-afpmbai-700 rounded-lg p-3 text-white placeholder-afpmbai-500 focus:ring-2 focus:ring-afpmbai-400 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           placeholder="Enter password"
                         />
                       </div>
                       
-                      <div className="pt-4">
+                      <div className="pt-2">
                         <button 
                           type="submit"
                           disabled={isLoading}
-                          className="w-full bg-white text-afpmbai-900 font-bold py-4 rounded-xl hover:bg-afpmbai-100 transition-all shadow-lg text-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed active:scale-95"
+                          className="w-full bg-white text-afpmbai-900 font-bold py-3.5 rounded-xl hover:bg-afpmbai-100 transition-all shadow-lg text-base flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed active:scale-95"
                         >
                           {isLoading ? (
                             <>
-                              <Loader2 className="animate-spin" /> Verifying...
+                              <Loader2 className="animate-spin" size={18} /> Verifying...
                             </>
                           ) : (
                             "Login to Dashboard"
                           )}
                         </button>
-                        <p className="text-xs text-center text-afpmbai-400 mt-4">
+                        <p className="text-[10px] text-center text-afpmbai-400 mt-3">
                           Default: <span className="font-mono bg-afpmbai-800 px-1 rounded">admin</span> / <span className="font-mono bg-afpmbai-800 px-1 rounded">admin</span>
                         </p>
-                        <Link to="/" className={`block text-center text-afpmbai-400 mt-6 hover:text-white text-sm ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+                        <Link to="/" className={`block text-center text-afpmbai-400 mt-4 hover:text-white text-xs ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
                           Cancel and Return Home
                         </Link>
                       </div>
@@ -307,21 +325,21 @@ const StaffDashboard: React.FC = () => {
           </div>
 
           {/* Right Column: Station Configuration */}
-          <div className="w-full lg:w-2/3 bg-gray-50 flex flex-col h-full overflow-hidden">
-            <div className="p-8 lg:p-10 flex-1 flex flex-col h-full max-w-7xl mx-auto w-full">
-                <div className="mb-6 border-b pb-4 shrink-0">
-                   <h2 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                     <Briefcase className="text-afpmbai-600" size={32} />
+          <div className="w-full lg:w-8/12 bg-gray-50 flex flex-col h-full overflow-hidden">
+            <div className="p-6 lg:p-8 flex-1 flex flex-col h-full max-w-7xl mx-auto w-full">
+                <div className="mb-4 border-b pb-3 shrink-0">
+                   <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                     <Briefcase className="text-afpmbai-600" size={28} />
                      Station Configuration
                    </h2>
-                   <p className="text-gray-500 mt-2 text-lg">Select your assigned counter and the transactions you will process.</p>
+                   <p className="text-gray-500 mt-1 text-sm">Select your assigned counter and the transactions you will process.</p>
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0">
                     
                     {/* Counter Selection */}
-                    <div className="mb-6 shrink-0">
-                       <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
+                    <div className="mb-4 shrink-0">
+                       <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                          Assigned Counter <span className="text-red-500">*</span>
                        </label>
                        <div className="relative max-w-xs">
@@ -329,7 +347,7 @@ const StaffDashboard: React.FC = () => {
                             value={assignedCounter}
                             disabled={isLoading || isLoginSuccess}
                             onChange={(e) => { setAssignedCounter(Number(e.target.value)); setError(null); }}
-                            className={`w-full p-3 bg-white border-2 rounded-xl font-bold text-gray-800 text-lg focus:ring-4 focus:ring-afpmbai-100 outline-none appearance-none cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed ${assignedCounter === 0 && error ? 'border-red-500' : 'border-gray-200 focus:border-afpmbai-500'}`}
+                            className={`w-full p-2.5 bg-white border-2 rounded-xl font-bold text-gray-800 text-base focus:ring-4 focus:ring-afpmbai-100 outline-none appearance-none cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed ${assignedCounter === 0 && error ? 'border-red-500' : 'border-gray-200 focus:border-afpmbai-500'}`}
                          >
                             <option value={0}>Select Counter...</option>
                             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
@@ -344,22 +362,23 @@ const StaffDashboard: React.FC = () => {
 
                     {/* Service Capabilities */}
                     <div className="flex-1 flex flex-col min-h-0">
-                       <div className="flex justify-between items-center mb-3 shrink-0">
-                          <label className="block text-sm font-bold text-gray-700 uppercase tracking-wide">
+                       <div className="flex justify-between items-center mb-2 shrink-0">
+                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
                             Allowed Transactions <span className="text-red-500">*</span>
                           </label>
                           <button 
                             type="button"
                             onClick={toggleSelectAll}
                             disabled={isLoading || isLoginSuccess}
-                            className="text-sm font-bold text-afpmbai-600 hover:text-afpmbai-800 hover:underline px-3 py-1 bg-afpmbai-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="text-xs font-bold text-afpmbai-600 hover:text-afpmbai-800 hover:underline px-2 py-1 bg-afpmbai-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {assignedServices.length === SERVICES.length ? 'Deselect All' : 'Select All'}
                           </button>
                        </div>
                        
-                       <div className={`flex-1 overflow-y-auto pr-2 pb-2 border-2 rounded-xl p-2 ${assignedServices.length === 0 && error ? 'border-red-500 bg-red-50' : 'border-transparent'}`}>
-                          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+                       {/* Scrollable container with NO SCROLLBAR */}
+                       <div className={`flex-1 overflow-y-auto no-scrollbar pr-2 pb-2 border-2 rounded-xl p-2 ${assignedServices.length === 0 && error ? 'border-red-500 bg-red-50' : 'border-transparent'}`}>
+                          <div className="grid grid-cols-2 xl:grid-cols-3 gap-2">
                               {SERVICES.map((service) => {
                                 const isSelected = assignedServices.includes(service.type);
                                 return (
@@ -369,7 +388,7 @@ const StaffDashboard: React.FC = () => {
                                       if(!isLoading && !isLoginSuccess) toggleServiceSelection(service.type);
                                     }}
                                     className={`
-                                      cursor-pointer border-2 rounded-xl p-3 flex items-center gap-3 transition-all h-full
+                                      cursor-pointer border-2 rounded-xl p-2.5 flex items-center gap-3 transition-all h-full
                                       ${isSelected 
                                         ? 'bg-afpmbai-50 border-afpmbai-500 shadow-md' 
                                         : 'bg-white border-gray-100 hover:border-gray-300'}
@@ -377,23 +396,23 @@ const StaffDashboard: React.FC = () => {
                                     `}
                                   >
                                     <div className={`
-                                      w-6 h-6 rounded flex items-center justify-center shrink-0 border transition-colors
+                                      w-5 h-5 rounded flex items-center justify-center shrink-0 border transition-colors
                                       ${isSelected ? 'bg-afpmbai-600 border-afpmbai-600' : 'bg-gray-100 border-gray-300'}
                                     `}>
-                                      {isSelected && <Check size={16} className="text-white" />}
+                                      {isSelected && <Check size={14} className="text-white" />}
                                     </div>
                                     <div>
                                         <span className={`font-bold block text-sm leading-tight ${isSelected ? 'text-afpmbai-800' : 'text-gray-600'}`}>
                                           {service.label}
                                         </span>
-                                        <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1 rounded mt-1 inline-block">{service.prefix}</span>
+                                        <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1 rounded mt-0.5 inline-block">{service.prefix}</span>
                                     </div>
                                   </div>
                                 );
                               })}
                           </div>
                        </div>
-                       <p className={`text-xs mt-2 text-right shrink-0 ${assignedServices.length === 0 && error ? 'text-red-500 font-bold' : 'text-gray-400'}`}>Selected: {assignedServices.length} types</p>
+                       <p className={`text-[10px] mt-1 text-right shrink-0 ${assignedServices.length === 0 && error ? 'text-red-500 font-bold' : 'text-gray-400'}`}>Selected: {assignedServices.length} types</p>
                     </div>
                 </div>
             </div>
@@ -404,76 +423,90 @@ const StaffDashboard: React.FC = () => {
 
   // --- RENDER DASHBOARD (LOGGED IN) ---
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden font-sans">
+    <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+      
       {/* Sidebar */}
-      <div className="w-64 bg-afpmbai-900 text-white flex flex-col shadow-2xl z-20 flex-shrink-0">
-        <div className="p-6 bg-afpmbai-800 border-b border-afpmbai-700 flex items-center gap-3">
-          <div className="w-8 h-8 bg-white rounded-lg p-1 shrink-0">
-             <AfpmbaiLogo className="w-full h-full" />
-          </div>
-          <div>
-             <h1 className="text-xl font-bold tracking-wide">AFPMBAI</h1>
-             <p className="text-xs text-afpmbai-300">Staff Portal</p>
-          </div>
-        </div>
+      <div className="w-64 bg-afpmbai-900 text-white flex flex-col shadow-2xl z-20 flex-shrink-0 relative transition-all">
+        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 pointer-events-none"></div>
         
-        <div className="p-6 flex-1 overflow-y-auto">
-          <div className="mb-8 p-4 bg-afpmbai-800/50 rounded-xl border border-afpmbai-700">
-            <div className="flex items-center gap-2 mb-2">
-               <div className="h-8 w-8 rounded-full bg-afpmbai-500 flex items-center justify-center font-bold text-sm">
-                 {assignedCounter}
-               </div>
-               <div>
-                 <p className="text-xs text-afpmbai-300 font-bold uppercase">My Station</p>
-                 <p className="font-bold">Counter {assignedCounter}</p>
-               </div>
+        <div className="p-6 border-b border-afpmbai-800/50 flex flex-col gap-3 relative z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-white rounded-lg p-1 shrink-0 shadow-lg">
+               <AfpmbaiLogo className="w-full h-full" />
             </div>
-            <div className="text-xs text-afpmbai-400 border-t border-afpmbai-700 pt-2 mt-2">
-               <Briefcase size={12} className="inline mr-1" />
-               {assignedServices.length} transaction types active
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <div className="p-3 bg-white/10 rounded-lg flex items-center justify-between">
-              <span className="text-sm">Served Today</span>
-              <span className="font-bold text-lg">{completedCount}</span>
-            </div>
-            <div className="p-3 bg-white/5 rounded-lg flex items-center justify-between">
-              <span className="text-sm">Queue Load</span>
-              <span className="font-bold text-lg">{waitingTickets.length}</span>
+            <div>
+               <h1 className="text-lg font-bold tracking-wide leading-none">AFPMBAI</h1>
+               <p className="text-[9px] text-afpmbai-300 font-medium uppercase tracking-wider mt-0.5">Staff Portal</p>
             </div>
           </div>
           
-          <div className="mt-8 pt-8 border-t border-afpmbai-800 space-y-4">
-             <button 
-                onClick={handleLogout}
-                className="flex items-center text-red-300 hover:text-red-100 transition-colors gap-2 text-sm w-full"
-             >
-                <LogOut size={16}/> Logout Station
-             </button>
-             <Link to="/" className="flex items-center text-afpmbai-400 hover:text-white transition-colors gap-2 text-xs">
-                Back to Home
-             </Link>
+          <div className="bg-afpmbai-800/60 rounded-lg p-3 border border-afpmbai-700/50 backdrop-blur-sm">
+             <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-afpmbai-300 font-bold uppercase tracking-wider">Station</span>
+                <span className="bg-green-500 w-1.5 h-1.5 rounded-full animate-pulse"></span>
+             </div>
+             <div className="text-2xl font-bold text-white flex items-baseline gap-1">
+               <span className="text-xs font-normal text-afpmbai-400">Counter</span> {assignedCounter}
+             </div>
           </div>
         </div>
         
-        <div className="p-4 bg-afpmbai-950 text-center text-xs text-gray-500">
-          User: {username}
+        <div className="p-5 flex-1 overflow-y-auto relative z-10">
+          <div className="space-y-3">
+             <div className="text-[10px] text-afpmbai-400 font-bold uppercase tracking-widest mb-1">Metrics</div>
+             
+             <div className="grid grid-cols-2 gap-2">
+               <div className="bg-afpmbai-800/30 p-2.5 rounded-lg border border-afpmbai-700/30 text-center hover:bg-afpmbai-800/50 transition-colors">
+                  <div className="text-xl font-bold text-white">{completedCount}</div>
+                  <div className="text-[9px] text-afpmbai-400 uppercase">Served</div>
+               </div>
+               <div className="bg-afpmbai-800/30 p-2.5 rounded-lg border border-afpmbai-700/30 text-center hover:bg-afpmbai-800/50 transition-colors">
+                  <div className="text-xl font-bold text-orange-400">{tickets.filter(t => t.status === TicketStatus.SKIPPED && t.counter === assignedCounter).length}</div>
+                  <div className="text-[9px] text-afpmbai-400 uppercase">Skipped</div>
+               </div>
+             </div>
+
+             <div className="bg-afpmbai-800/30 p-3 rounded-lg border border-afpmbai-700/30 mt-2">
+               <div className="flex items-center justify-between text-[10px] text-afpmbai-300 mb-1.5">
+                 <span>Queue Load</span>
+                 <span className="text-white font-bold">{waitingTickets.length} waiting</span>
+               </div>
+               <div className="w-full bg-afpmbai-900 rounded-full h-1 overflow-hidden">
+                 <div className="bg-green-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (waitingTickets.length / 20) * 100)}%` }}></div>
+               </div>
+             </div>
+          </div>
+        </div>
+        
+        <div className="p-5 border-t border-afpmbai-800 relative z-10">
+           <button 
+              onClick={handleLogout}
+              className="flex items-center justify-center text-red-200 hover:text-white hover:bg-red-500/20 py-2.5 rounded-lg transition-all gap-2 text-xs w-full font-medium mb-2"
+           >
+              <LogOut size={14}/> Sign Out
+           </button>
+           <div className="text-center text-[9px] text-afpmbai-500">
+             User: <span className="text-afpmbai-300 font-bold">{username}</span>
+           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-        {/* Header */}
-        <header className="bg-white h-16 shadow-sm border-b flex items-center justify-between px-6 z-10 shrink-0">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-gray-50/50">
+        
+        {/* Modern Header */}
+        <header className="h-16 px-6 flex items-center justify-between shrink-0 bg-white/80 backdrop-blur-md border-b border-gray-200 z-10 sticky top-0">
           <div className="flex items-center gap-4 flex-1 min-w-0">
-             <Filter className="text-gray-400 shrink-0" size={20} />
-             <span className="text-sm font-medium text-gray-500 shrink-0 hidden md:block">Active Filter:</span>
-             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar mask-linear-fade flex-1">
+             <div className="flex items-center gap-2 text-gray-400">
+               <Filter size={16} />
+               <span className="text-[10px] font-bold uppercase tracking-wider">Filter Queue</span>
+             </div>
+             
+             {/* Filter List - Scrollable */}
+             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar flex-1 w-full">
                <button 
                 onClick={() => setFilterType('ALL')}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${filterType === 'ALL' ? 'bg-afpmbai-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all transform active:scale-95 border whitespace-nowrap ${filterType === 'ALL' ? 'bg-afpmbai-900 text-white border-afpmbai-900 shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
                >
                  All Assigned
                </button>
@@ -484,143 +517,178 @@ const StaffDashboard: React.FC = () => {
                    <button
                      key={s.type}
                      onClick={() => setFilterType(s.type)}
-                     className={`px-3 py-1 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${filterType === s.type ? 'bg-afpmbai-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                     className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all transform active:scale-95 border whitespace-nowrap ${filterType === s.type ? 'bg-afpmbai-600 text-white border-afpmbai-600 shadow-md' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
                    >
-                     {s.prefix} - {s.label}
+                     {s.prefix} • {s.label}
                    </button>
                  );
                })}
              </div>
           </div>
-          <div className="flex items-center gap-4 ml-4 shrink-0">
-             <button onClick={resetQueue} className="text-xs text-red-500 hover:underline">Reset System</button>
+          
+          <div className="flex items-center gap-3 ml-4 pl-4 border-l border-gray-200 shrink-0">
+             <div className="text-right hidden md:block">
+               <div className="text-[10px] text-gray-400 font-medium">System Status</div>
+               <div className="text-xs font-bold text-green-600 flex items-center justify-end gap-1">
+                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div> Online
+               </div>
+             </div>
+             <button onClick={resetQueue} className="bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-600 p-2 rounded-lg transition-colors" title="Reset Queue System">
+               <Activity size={16} />
+             </button>
           </div>
         </header>
 
-        {/* Dashboard Content */}
-        <main className="flex-1 p-6 overflow-hidden flex gap-6">
+        {/* Dashboard Grid */}
+        <main className="flex-1 p-4 lg:p-6 overflow-hidden flex flex-col md:flex-row gap-4 lg:gap-6">
           
-          {/* Left: Waiting List */}
-          <div className="w-1/3 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-            <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
-              <h2 className="font-bold text-gray-700 flex items-center gap-2">
-                <Users size={18} /> Queue (Filtered)
-              </h2>
-              <span className="bg-afpmbai-100 text-afpmbai-800 text-xs px-2 py-1 rounded-full font-bold">{waitingTickets.length}</span>
+          {/* Left: Waiting Queue */}
+          <div className="w-full md:w-80 lg:w-96 flex flex-col min-h-0 animate-fade-in-up shrink-0">
+            <div className="flex justify-between items-end mb-2 px-1">
+              <h2 className="font-bold text-lg text-gray-800">Waiting List</h2>
+              <span className="text-xs text-gray-500 font-medium">{waitingTickets.length} tickets</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-2">
-              {waitingTickets.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                  <Activity size={32} className="mb-2 opacity-50" />
-                  <p className="text-center text-sm px-4">No waiting tickets matching your current filter.</p>
-                </div>
-              ) : (
-                waitingTickets.map((ticket) => (
-                  <div key={ticket.id} className="bg-white border hover:border-afpmbai-300 p-3 rounded-lg shadow-sm flex justify-between items-center transition-all">
-                    <div>
-                      <div className="text-xl font-bold text-gray-800 flex items-baseline gap-2">
-                        {ticket.number} 
-                        {ticket.customerName && <span className="text-sm font-normal text-gray-600 truncate max-w-[100px]">{ticket.customerName}</span>}
+            
+            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+               <div className="p-3 bg-gray-50/50 border-b border-gray-100 flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                 <span>Ticket Details</span>
+                 <span>Wait Time</span>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto p-2 space-y-2 no-scrollbar">
+                 {waitingTickets.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-300">
+                      <div className="bg-gray-50 p-4 rounded-full mb-3">
+                        <Clock size={32} className="opacity-20 text-gray-500" />
                       </div>
-                      <div className="text-xs text-gray-500 truncate max-w-[120px]" title={SERVICES.find(s => s.type === ticket.serviceType)?.label}>
-                        {SERVICES.find(s => s.type === ticket.serviceType)?.label}
+                      <p className="font-medium text-gray-400 text-sm">Queue is empty</p>
+                    </div>
+                 ) : (
+                    waitingTickets.map((ticket, idx) => (
+                      <div 
+                        key={ticket.id} 
+                        className="group bg-white hover:bg-blue-50/50 border border-transparent hover:border-blue-100 p-3 rounded-lg transition-all cursor-default flex justify-between items-center animate-in slide-in-from-bottom-2 fade-in duration-300"
+                        style={{ animationDelay: `${idx * 50}ms` }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-md bg-gray-100 text-gray-600 font-bold flex items-center justify-center group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors text-sm">
+                            {ticket.number.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-gray-800 text-base leading-none mb-0.5">
+                              {ticket.number}
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]">
+                               {ticket.customerName || 'Guest'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                           <div className="text-[10px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
+                             {Math.floor((Date.now() - ticket.createdAt) / 60000)}m
+                           </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                       <div className="text-xs font-mono text-gray-400">{new Date(ticket.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                       <div className="text-xs text-afpmbai-600 font-medium">Waiting</div>
-                    </div>
-                  </div>
-                ))
-              )}
+                    ))
+                 )}
+               </div>
             </div>
           </div>
 
-          {/* Right: Active Service Controls */}
-          <div className="w-2/3 flex flex-col gap-6">
-            
-            {/* Now Serving Card */}
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-8 flex-1 flex flex-col items-center justify-center relative overflow-hidden">
-               <div className="absolute top-0 left-0 w-full h-2 bg-afpmbai-500"></div>
-               
-               {currentTicket ? (
-                 <>
-                   <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full font-bold text-sm mb-6 animate-pulse">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      NOW SERVING @ COUNTER {assignedCounter}
-                   </div>
-                   <div className="text-9xl font-black text-afpmbai-800 mb-2 tracking-tighter">
-                      {currentTicket.number}
-                   </div>
-                   {currentTicket.customerName && (
-                     <div className="flex items-center gap-2 text-2xl font-bold text-gray-700 mb-4 bg-gray-50 px-6 py-2 rounded-lg border border-gray-100">
-                        <User size={24} className="text-afpmbai-500" />
-                        {currentTicket.customerName}
-                     </div>
-                   )}
-                   <div className="text-lg text-gray-500 mb-8 text-center max-w-lg uppercase tracking-wide">
-                      {SERVICES.find(s => s.type === currentTicket.serviceType)?.label}
-                   </div>
-                   
-                   <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                      <button 
-                        onClick={() => completeTicket(currentTicket.id)}
-                        className="flex items-center justify-center gap-2 bg-afpmbai-600 hover:bg-afpmbai-700 text-white py-4 px-6 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1"
-                      >
-                        <CheckSquare /> COMPLETE
-                      </button>
-                      <button 
-                        onClick={() => skipTicket(currentTicket.id)}
-                        className="flex items-center justify-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-700 py-4 px-6 rounded-xl font-bold text-lg shadow hover:shadow-md transition-all"
-                      >
-                        <SkipForward /> SKIP
-                      </button>
-                   </div>
-                   <div className="mt-8 flex items-center gap-2 text-gray-400 text-sm">
-                      <Clock size={16} /> Started at {new Date(currentTicket.servedAt || 0).toLocaleTimeString()}
-                   </div>
-                 </>
-               ) : (
-                 <div className="text-center">
-                    <div className="bg-gray-100 rounded-full p-6 inline-block mb-4">
-                      <Bell size={48} className="text-gray-400" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-gray-700">Counter {assignedCounter} is Open</h2>
-                    <p className="text-gray-500 mb-8">
-                       {filterType === 'ALL' 
-                         ? 'Ready to call next ticket from any assigned category.' 
-                         : `Ready to call next ${SERVICES.find(s => s.type === filterType)?.label} ticket.`}
-                    </p>
-                    <button 
-                      onClick={handleCallNext}
-                      className="bg-afpmbai-600 hover:bg-afpmbai-700 text-white py-4 px-12 rounded-full font-bold text-xl shadow-lg hover:shadow-green-200/50 transition-all flex items-center gap-3 mx-auto"
-                    >
-                      <Bell size={24} /> CALL NEXT
-                    </button>
-                 </div>
-               )}
-            </div>
+          {/* Right: Interaction Area */}
+          <div className="flex-1 flex flex-col gap-4 animate-fade-in min-w-0">
+             <div className="flex items-center justify-between mb-0 h-8">
+                <h2 className="font-bold text-lg text-gray-800">Current Session</h2>
+             </div>
 
-            {/* Quick Stats */}
-            <div className="h-32 bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center justify-between">
-               <div>
-                  <h3 className="font-bold text-gray-700">Counter {assignedCounter} Performance</h3>
-                  <p className="text-sm text-gray-500">
-                    Handling {assignedServices.length} types of transactions
-                  </p>
-               </div>
-               <div className="flex gap-8 text-center">
-                  <div>
-                    <div className="text-2xl font-bold text-afpmbai-600">{completedCount}</div>
-                    <div className="text-xs text-gray-500 uppercase font-semibold">Served</div>
+             {/* Hero Card */}
+             <div className="flex-1 bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 relative overflow-hidden flex flex-col transition-all">
+                
+                {currentTicket ? (
+                  // ACTIVE SESSION STATE
+                  <div className="flex-1 flex flex-col relative z-10">
+                     <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-afpmbai-400 to-afpmbai-600"></div>
+                     
+                     <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+                        <div className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4 border border-green-100 animate-pulse">
+                           <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span> Serving Now
+                        </div>
+                        
+                        <div className="mb-2 text-7xl lg:text-8xl xl:text-8xl font-black text-gray-800 tracking-tighter leading-none filter drop-shadow-sm">
+                           {currentTicket.number}
+                        </div>
+                        
+                        <div className="text-lg text-gray-500 font-medium mb-4">
+                           {SERVICES.find(s => s.type === currentTicket.serviceType)?.label}
+                        </div>
+
+                        {currentTicket.customerName && (
+                          <div className="flex items-center gap-2 bg-gray-50 px-6 py-3 rounded-xl border border-gray-100 mb-4 transform transition-transform hover:scale-105">
+                             <div className="bg-white p-1.5 rounded-full shadow-sm">
+                               <User size={18} className="text-afpmbai-600" />
+                             </div>
+                             <span className="text-xl font-bold text-gray-700">{currentTicket.customerName}</span>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400 bg-white px-2.5 py-0.5 rounded-full shadow-sm border border-gray-100">
+                           <Clock size={12} /> Started {new Date(currentTicket.servedAt || 0).toLocaleTimeString()}
+                        </div>
+                     </div>
+                     
+                     {/* Action Bar */}
+                     <div className="p-4 bg-gray-50 border-t border-gray-100 grid grid-cols-3 gap-3">
+                        <button 
+                          onClick={() => completeTicket(currentTicket.id)}
+                          className="group bg-afpmbai-600 hover:bg-afpmbai-700 text-white p-3 lg:p-4 rounded-xl font-bold text-base shadow-lg hover:shadow-green-500/30 transition-all flex items-center justify-center gap-3 active:scale-95"
+                        >
+                          <CheckSquare className="group-hover:scale-110 transition-transform" size={20} />
+                          <span>Complete</span>
+                        </button>
+                        
+                        <button 
+                          onClick={handleRecall}
+                          className="group bg-white hover:bg-orange-50 text-orange-600 border-2 border-orange-100 hover:border-orange-200 p-3 lg:p-4 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-3 active:scale-95"
+                        >
+                          <Volume2 className="group-hover:scale-110 transition-transform" size={20} />
+                          <span>Recall</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => skipTicket(currentTicket.id)}
+                          className="group bg-white hover:bg-gray-100 text-gray-500 border-2 border-gray-100 hover:border-gray-200 p-3 lg:p-4 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-3 active:scale-95"
+                        >
+                          <SkipForward className="group-hover:scale-110 transition-transform" size={20} />
+                          <span>Skip</span>
+                        </button>
+                     </div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold text-red-500">{tickets.filter(t => t.status === TicketStatus.SKIPPED && t.counter === assignedCounter).length}</div>
-                    <div className="text-xs text-gray-500 uppercase font-semibold">Skipped</div>
+                ) : (
+                  // IDLE STATE
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-gradient-to-b from-white to-gray-50/50">
+                     <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-xl shadow-blue-100 mb-6 relative">
+                        <div className="absolute inset-0 bg-blue-50 rounded-full animate-ping opacity-20"></div>
+                        <Zap size={48} className="text-afpmbai-500" />
+                     </div>
+                     
+                     <h3 className="text-2xl font-bold text-gray-800 mb-2">Station Ready</h3>
+                     <p className="text-gray-500 max-w-sm mx-auto mb-8 text-base">
+                       You are currently assigned to <span className="font-bold text-gray-700">Counter {assignedCounter}</span>.
+                       <br/>Ready to process new tickets.
+                     </p>
+                     
+                     <button 
+                       onClick={handleCallNext}
+                       className="group relative bg-afpmbai-600 hover:bg-afpmbai-700 text-white py-4 px-12 rounded-full font-bold text-xl shadow-xl hover:shadow-2xl hover:shadow-green-500/30 transition-all transform hover:-translate-y-1 active:translate-y-0 active:scale-95 overflow-hidden"
+                     >
+                        <span className="relative z-10 flex items-center gap-2">
+                           Call Next Ticket <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
+                        </span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+                     </button>
                   </div>
-               </div>
-            </div>
-            
+                )}
+             </div>
           </div>
         </main>
       </div>

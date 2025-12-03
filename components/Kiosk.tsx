@@ -21,7 +21,8 @@ import {
   Search,
   User,
   Delete,
-  Space
+  Space,
+  AlertCircle
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 
@@ -95,6 +96,7 @@ const Kiosk: React.FC = () => {
   const [showNameModal, setShowNameModal] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
   const [userName, setUserName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
 
   // Clock State
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -111,9 +113,27 @@ const Kiosk: React.FC = () => {
   const [aiSuggestion, setAiSuggestion] = useState<ServiceType | null>(null);
   const [aiReasoning, setAiReasoning] = useState('');
 
+  // AI Button Text Rotation
+  const [aiTextIndex, setAiTextIndex] = useState(0);
+  const aiButtonTexts = [
+    "Ask MBAINGERS",
+    "Unsure what to pick?",
+    "Let AI guide you",
+    "Find your transaction",
+    "Type your concern"
+  ];
+
+  useEffect(() => {
+    const textTimer = setInterval(() => {
+      setAiTextIndex((prev) => (prev + 1) % aiButtonTexts.length);
+    }, 3000);
+    return () => clearInterval(textTimer);
+  }, []);
+
   const handleServiceClick = (type: ServiceType) => {
     setSelectedService(type);
     setUserName('');
+    setNameError(null);
     setShowNameModal(true);
     // Close AI if open
     setShowAiModal(false);
@@ -123,6 +143,7 @@ const Kiosk: React.FC = () => {
 
   const handleKeyboardInput = (key: string) => {
     setUserName(prev => prev + key);
+    if (nameError) setNameError(null);
   };
   
   const handleKeyboardDelete = () => {
@@ -136,8 +157,12 @@ const Kiosk: React.FC = () => {
   const handleNameConfirm = () => {
     if (!selectedService) return;
     
-    // Default name if empty
-    const finalName = userName.trim() || 'Guest';
+    if (!userName.trim()) {
+      setNameError("Please enter your name to proceed.");
+      return;
+    }
+    
+    const finalName = userName.trim();
     
     const ticket = createTicket(selectedService, finalName);
     setGeneratedTicket(ticket);
@@ -180,18 +205,18 @@ const Kiosk: React.FC = () => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `
-        You are a helpful receptionist at AFPMBAI (Armed Forces and Police Mutual Benefit Association, Inc.).
-        A member is asking for help with their transaction.
+        You are MBAINGERS, an intelligent and friendly virtual assistant for AFPMBAI (Armed Forces and Police Mutual Benefit Association, Inc.).
         
-        Available Services:
-        ${SERVICES.map(s => `${s.prefix} (${s.type}): ${s.label} - ${s.description}`).join('\n')}
-
-        User Query: "${aiQuery}"
-
-        Task:
-        1. Identify the most appropriate Service Type for the user's query.
-        2. Provide a very short reason why.
-        3. Return the result in JSON format with keys: "servicePrefix" (e.g., "A", "B", etc.) and "reason".
+        The user has been asked to: "Describe your banking needs."
+        
+        User's Response: "${aiQuery}"
+        
+        Based on this, map their need to one of the following Service Categories:
+        ${SERVICES.map(s => `- Code ${s.prefix} (${s.label}): ${s.description}`).join('\n')}
+        
+        Your response must be a JSON object containing:
+        1. "servicePrefix": The single letter code (A-L) of the best matching service.
+        2. "reason": A short, conversational explanation (max 20 words) addressing the user directly (e.g., "Since you want to pay a loan, Payment is the right counter.").
       `;
 
       const response = await ai.models.generateContent({
@@ -222,7 +247,7 @@ const Kiosk: React.FC = () => {
   };
 
   const getIcon = (iconName: string) => {
-    const props = { size: 32, className: "mb-2 text-afpmbai-600" };
+    const props = { size: 32, className: "mb-2 text-afpmbai-600 transition-colors duration-300 group-hover:text-afpmbai-700" };
     switch (iconName) {
       case 'Accessibility': return <Accessibility {...props} />;
       case 'Undo2': return <Undo2 {...props} />;
@@ -275,7 +300,9 @@ const Kiosk: React.FC = () => {
           <div className="bg-gradient-to-tr from-blue-500 to-purple-500 p-1.5 rounded-full text-white">
             <Sparkles size={18} />
           </div>
-          <span className="hidden md:inline">Not sure? Ask AI</span>
+          <span className="hidden md:inline min-w-[150px] text-center transition-all duration-300 animate-fade-in" key={aiTextIndex}>
+            {aiButtonTexts[aiTextIndex]}
+          </span>
           <span className="md:hidden">Ask AI</span>
         </button>
       </div>
@@ -287,24 +314,36 @@ const Kiosk: React.FC = () => {
             <button
               key={service.type}
               onClick={() => handleServiceClick(service.type)}
-              className="bg-white border border-afpmbai-100 hover:border-afpmbai-500 rounded-xl p-2 md:p-4 shadow-sm hover:shadow-xl transition-all duration-200 transform hover:-translate-y-1 flex flex-col items-center justify-center text-center h-full w-full relative group"
+              className="
+                bg-white border-2 border-afpmbai-100 hover:border-afpmbai-500 
+                rounded-2xl p-2 md:p-4 
+                shadow-lg hover:shadow-2xl 
+                transition-all duration-300 ease-out 
+                transform hover:-translate-y-2 hover:scale-[1.02] 
+                flex flex-col items-center justify-center text-center 
+                h-full w-full relative group
+              "
             >
-              <div className="absolute top-3 left-3 bg-afpmbai-100 text-afpmbai-800 text-xs font-bold px-2 py-1 rounded opacity-80 group-hover:opacity-100">
+              <div className="absolute top-3 left-3 bg-afpmbai-100 text-afpmbai-800 text-xs font-bold px-2 py-1 rounded opacity-80 group-hover:opacity-100 transition-opacity">
                   {service.prefix}
               </div>
               
               {getWaitingCount(service.type) > 0 && (
-                <div className="absolute top-3 right-3 text-xs text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded-full border border-orange-100">
+                <div className="absolute top-3 right-3 text-xs text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded-full border border-orange-100 animate-pulse">
                   {getWaitingCount(service.type)} waiting
                 </div>
               )}
               
-              <div className="bg-afpmbai-50 rounded-full p-3 mb-2 group-hover:bg-afpmbai-100 transition-colors">
+              <div className="bg-afpmbai-50 rounded-full p-4 mb-3 group-hover:bg-afpmbai-100 transition-all duration-300 group-hover:scale-110 shadow-inner">
                 {getIcon(service.icon)}
               </div>
               
-              <h2 className="text-base md:text-lg font-bold text-gray-800 mb-1 leading-tight">{service.label}</h2>
-              <p className="text-xs text-gray-500 line-clamp-2 px-2 hidden sm:block">{service.description}</p>
+              <h2 className="text-base md:text-xl font-bold text-gray-800 mb-1 leading-tight group-hover:text-afpmbai-800 transition-colors">
+                {service.label}
+              </h2>
+              <p className="text-xs text-gray-500 line-clamp-2 px-2 hidden sm:block group-hover:text-gray-600">
+                {service.description}
+              </p>
             </button>
           ))}
         </div>
@@ -331,9 +370,16 @@ const Kiosk: React.FC = () => {
                     value={userName}
                     readOnly
                     placeholder="Touch keyboard to type..."
-                    className="w-full text-center text-3xl font-bold p-4 rounded-xl border-2 border-afpmbai-300 focus:border-afpmbai-600 focus:ring-4 focus:ring-afpmbai-100 outline-none bg-white text-gray-800 placeholder-gray-300 shadow-inner"
+                    className={`w-full text-center text-3xl font-bold p-4 rounded-xl border-2 outline-none bg-white text-gray-800 placeholder-gray-300 shadow-inner ${nameError ? 'border-red-500 ring-2 ring-red-100' : 'border-afpmbai-300 focus:border-afpmbai-600 focus:ring-4 focus:ring-afpmbai-100'}`}
                   />
                 </div>
+                
+                {nameError && (
+                  <div className="mb-4 text-red-600 bg-red-50 px-4 py-2 rounded-lg font-bold border border-red-200 animate-pulse flex items-center gap-2 w-full max-w-xl justify-center">
+                    <AlertCircle size={20} />
+                    {nameError}
+                  </div>
+                )}
                 
                 <VirtualKeyboard 
                   onKeyPress={handleKeyboardInput} 
@@ -353,9 +399,16 @@ const Kiosk: React.FC = () => {
             <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white flex justify-between items-start shrink-0">
               <div>
                 <h3 className="text-2xl font-bold flex items-center gap-2">
-                  <Bot size={28} /> Virtual Assistant
+                  <Bot size={28} /> MBAINGERS
+                  {isAnalyzing && (
+                    <div className="flex space-x-1 ml-3 mt-1.5">
+                      <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                    </div>
+                  )}
                 </h3>
-                <p className="text-blue-100 text-sm mt-1">Describe what you need, and I'll find the right queue for you.</p>
+                <p className="text-blue-100 text-sm mt-1">Please describe your banking needs, and I'll find the right queue for you.</p>
               </div>
               <button onClick={() => setShowAiModal(false)} className="text-white/80 hover:text-white text-2xl font-bold">&times;</button>
             </div>
@@ -393,11 +446,11 @@ const Kiosk: React.FC = () => {
                     {isAnalyzing ? (
                       <>
                         <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                        Analyzing...
+                        MBAINGERS is thinking...
                       </>
                     ) : (
                       <>
-                        <Search size={20} /> Find Service
+                        <Search size={20} /> Ask MBAINGERS
                       </>
                     )}
                   </button>
